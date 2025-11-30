@@ -1,0 +1,45 @@
+{
+  "name": "hawiah-core",
+  "version": "0.1.0",
+  "description": "Schema-less database abstraction layer with multiple driver support",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node test/example.js"
+  },
+  "keywords": [
+    "database",
+    "schema-less",
+    "driver",
+    "abstraction",
+    "sqlite",
+    "mongodb",
+    "mysql",
+    "postgresql",
+    "firebase",
+    "orm",
+    "query-builder"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shuruhatik/hawiah-core.git"
+  },
+  "homepage": "https://github.com/shuruhatik/hawiah-core#readme",
+  "bugs": {
+    "url": "https://github.com/shuruhatik/hawiah-core/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "INSTALLATION.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
