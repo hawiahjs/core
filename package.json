@@ -1,6 +1,6 @@
 {
   "name": "@hawiah/core",
-  "version": "1.0.2",
+  "version": "1.1.2",
   "description": "Core package for Hawiah - Schema-less database abstraction layer with relationships and DataLoader batching",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -37,7 +37,7 @@
     "type": "git",
     "url": "https://github.com/Shuruhatik/hawiah-core"
   },
-  "homepage": "https://hawiah.shuruhatik.com/",
+  "homepage": "https://hawiah.js.org/",
   "bugs": {
     "url": "https://github.com/Shuruhatik/hawiah-core/issues"
   },

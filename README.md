@@ -1,102 +1,91 @@
-# @hawiah/core [![NPM version](https://img.shields.io/npm/v/@hawiah/core.svg?style=flat-square&color=informational)](https://npmjs.com/package/@hawiah/core)
+# Hawiah Core 🦅
 
-Core package for Hawiah - Schema-less database abstraction layer with multiple driver support, relationships, and DataLoader batching.
+**The Universal, Hybrid Database Driver & ORM**
 
-> **Note:** This is the core package. For the main package, install `hawiah` instead.
+Hawiah abstracts your database layer, allowing you to write code once and run it anywhere. It seamlessly supports SQL, NoSQL, In-Memory, and File-based storage with a unified API.
 
-## Installation
+---
+
+## ✨ Key Features
+
+*   **Universal API:** `insert`, `get`, `update`, `delete` work identically across all drivers.
+*   **Hybrid Schema System (New!):**
+    *   **Optional:** You can go fully schema-less (NoSQL style).
+    *   **Powerful:** Define a Schema to get validation and structure.
+    *   **Hybrid Storage:** On SQL drivers, schemas map to real columns for performance, while keeping a JSON column for flexibility.
+*   **Virtual Relationships:** define relationships between *different* databases/drivers without complex joins.
+*   **Zero Lock-in:** Switch from JSON files to PostgreSQL in seconds.
+
+---
+
+## 📦 Installation
 
 ```bash
-# Install core package only
 npm install @hawiah/core
-
-# Or install the main package
-npm install hawiah
+# Install a driver:
+npm install @hawiah/sqlite 
+# or @hawiah/postgres, @hawiah/mongo, etc.
 ```
 
-## Features
+## 🚀 Quick Start
 
-- 🚀 Lightweight and fast
-- 🔌 Multiple database driver support
-- 🔗 Built-in relationships with DataLoader batching
-- 📦 Schema-less design
-- 🎯 Simple and intuitive API
-- 🔄 Automatic N+1 query optimization
-- 💾 Memory driver included
+### 1. Schema-Less (Flexible Mode)
+Perfect for prototyping or pure NoSQL usage.
 
-## Quick Start
+```javascript
+const { Hawiah } = require('@hawiah/core');
+const { SQLiteDriver } = require('@hawiah/sqlite');
 
-```typescript
-import { Hawiah, MemoryDriver } from '@hawiah/core';
-const db = new Hawiah({ driver: new MemoryDriver() });
+const db = new Hawiah({ 
+    driver: new SQLiteDriver('mydb.sqlite') 
+});
+
+await db.connect();
+await db.insert({ title: 'My Post', views: 100 }); // Just works!
 ```
 
-## API Methods
+### 2. With Schema (Structured Mode)
+Get validation and SQL performance where needed.
 
-### Basic Operations
-- `insert(data)` - Insert a record
-- `insertMany(dataArray)` - Insert multiple records
-- `get(query, limit?)` - Get records matching query
-- `getOne(query)` - Get single record
-- `getAll()` - Get all records
-- `update(query, data)` - Update records
-- `remove(query)` - Remove records
-- `clear()` - Clear all records
+```javascript
+const { Hawiah, Schema, DataTypes } = require('@hawiah/core');
+const { PostgreSQLDriver } = require('@hawiah/postgres');
 
-### Query Operations
-- `getById(id)` - Get record by ID
-- `getBy(field, value)` - Get records by field value
-- `has(query)` - Check if records exist
-- `count(query)` - Count matching records
-- `sort(query, field, direction)` - Sort results
-- `select(query, fields)` - Select specific fields
-- `paginate(query, page, pageSize)` - Paginate results
+// Define Schema (Optional)
+const userSchema = new Schema({
+    username: { type: DataTypes.STRING, required: true },
+    email:    { type: DataTypes.EMAIL },
+    data:     { type: DataTypes.JSON } // Flexible JSON field
+});
 
-### Array Operations
-- `push(query, field, value)` - Add to array
-- `pull(query, field, value)` - Remove from array
-- `shift(query, field)` - Remove first element
-- `unshift(query, field, value)` - Add to beginning
-- `pop(query, field)` - Remove last element
+const db = new Hawiah({
+    driver: new PostgreSQLDriver({ /* config */, tableName: 'users' }),
+    schema: userSchema
+});
 
-### Numeric Operations
-- `increment(query, field, amount)` - Increment field
-- `decrement(query, field, amount)` - Decrement field
-- `sum(field, query)` - Sum field values
-
-### Relationships
-
-```typescript
-// Define relationships
-const users = new Hawiah({ driver: new MemoryDriver() });
-const posts = new Hawiah({ driver: new MemoryDriver() });
-
-users.relation('posts', posts, '_id', 'userId', 'many');
-posts.relation('author', users, 'userId', '_id', 'one');
-
-// Query with relationships
-const usersWithPosts = await users.getWith({}, 'posts');
+// Enforces structure & creates real SQL columns
+await db.insert({ username: 'Ali' }); 
 ```
 
-## Custom Drivers
+---
 
-Implement the `IDriver` interface to create custom drivers:
+## 📚 Drivers
 
-```typescript
-import { IDriver, Query, Data } from '@hawiah/core';
+| Driver | Package | Mode |
+| :--- | :--- | :--- |
+| **SQLite** | `@hawiah/sqlite` | Hybrid (SQL + JSON) |
+| **PostgreSQL**| `@hawiah/postgres`| Hybrid (SQL + JSON) |
+| **MySQL** | `@hawiah/mysql` | Hybrid (SQL + JSON) |
+| **MongoDB** | `@hawiah/mongo` | Virtual Schema |
+| **Firebase** | `@hawiah/firebase`| Virtual Schema |
+| **Local** | `@hawiah/local` | JSON/YAML Files |
 
-class MyDriver implements IDriver {
-  async connect(): Promise<void> { /* ... */ }
-  async disconnect(): Promise<void> { /* ... */ }
-  async get(query: Query): Promise<Data[]> { /* ... */ }
-  async getOne(query: Query): Promise<Data | null> { /* ... */ }
-  async set(data: Data): Promise<Data> { /* ... */ }
-  async update(query: Query, data: Data): Promise<number> { /* ... */ }
-  async delete(query: Query): Promise<number> { /* ... */ }
-  async exists(query: Query): Promise<boolean> { /* ... */ }
-  async count(query: Query): Promise<number> { /* ... */ }
-}
-```
+---
 
-## License
-MIT
+## 📖 Documentation
+
+For full details on the advanced Schema system and Relationships, check out the [Full Guide](https://github.com/Shuruhatik/hawiah-core/blob/main/HAWIAH_GUIDE.md).
+
+---
+
+**License:** MIT
