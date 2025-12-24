@@ -1,4 +1,5 @@
 import { IDriver, Query, Data } from './interfaces/IDriver';
+import { Schema, SchemaDefinition } from './Schema';
 import DataLoader from 'dataloader';
 
 /**
@@ -10,14 +11,24 @@ export class Hawiah {
   private isConnected: boolean = false;
   private relations: Map<string, RelationConfig> = new Map();
   private loaders: Map<string, DataLoader<any, any>> = new Map();
+  private schema?: Schema;
 
   /**
    * Creates a new Hawiah instance.
    * @param options - Configuration options
    * @param options.driver - The database driver to use
+   * @param options.schema - Optional schema definition
    */
-  constructor(options: { driver: IDriver }) {
+  constructor(options: { driver: IDriver, schema?: Schema | SchemaDefinition }) {
     this.driver = options.driver;
+    if (options.schema) {
+      this.schema = options.schema instanceof Schema ? options.schema : new Schema(options.schema);
+
+      // Pass the schema to the driver if it supports it (for SQL drivers to build tables)
+      if (this.driver.setSchema && this.schema) {
+        this.driver.setSchema(this.schema);
+      }
+    }
   }
 
   /**
@@ -49,7 +60,8 @@ export class Hawiah {
    */
   async insert(data: Data): Promise<Data> {
     this.ensureConnected();
-    return await this.driver.set(data);
+    const validated = this.validateData(data);
+    return await this.driver.set(validated);
   }
 
   /**
@@ -61,7 +73,8 @@ export class Hawiah {
     this.ensureConnected();
     const results: Data[] = [];
     for (const data of dataArray) {
-      const result = await this.driver.set(data);
+      const validated = this.validateData(data);
+      const result = await this.driver.set(validated);
       results.push(result);
     }
     return results;
@@ -124,7 +137,8 @@ export class Hawiah {
    */
   async update(query: Query, data: Data): Promise<number> {
     this.ensureConnected();
-    return await this.driver.update(query, data);
+    const validated = this.validateData(data, true);
+    return await this.driver.update(query, validated);
   }
 
   /**
@@ -135,7 +149,8 @@ export class Hawiah {
    */
   async updateOne(query: Query, data: Data): Promise<boolean> {
     this.ensureConnected();
-    const count = await this.driver.update(query, data);
+    const validated = this.validateData(data, true);
+    const count = await this.driver.update(query, validated);
     return count > 0;
   }
 
@@ -149,10 +164,18 @@ export class Hawiah {
     this.ensureConnected();
     const existing = await this.driver.getOne(query);
     if (existing) {
-      await this.driver.update(query, data);
-      return { ...existing, ...data };
+      // Update: validate partial
+      const validated = this.validateData(data, true);
+      await this.driver.update(query, validated);
+      return { ...existing, ...validated };
     } else {
-      return await this.driver.set({ ...query, ...data });
+      // Insert: validate full (merging query + data for validation context if needed, but data is the main payload)
+      // Usually save assumes query IS the id or unique key, which might not be in 'data'. 
+      // We should validate the combined object or just data? 
+      // Let's validate the combined object since that's what's being set.
+      const fullData = { ...query, ...data };
+      const validated = this.validateData(fullData);
+      return await this.driver.set(validated);
     }
   }
 
@@ -414,7 +437,8 @@ export class Hawiah {
     }
     const currentValue = Number(record[field]) || 0;
     const newValue = currentValue + amount;
-    await this.driver.update(query, { [field]: newValue });
+    // Use this.update to ensure validation
+    await this.update(query, { [field]: newValue });
     return newValue;
   }
 
@@ -447,7 +471,8 @@ export class Hawiah {
         record[field] = [];
       }
       record[field].push(value);
-      await this.driver.update(query, record);
+      const validated = this.validateData(record, false); // Full validation since we have full record
+      await this.driver.update(query, validated);
       count++;
     }
     return count;
@@ -468,8 +493,10 @@ export class Hawiah {
       if (Array.isArray(record[field])) {
         const initialLength = record[field].length;
         record[field] = record[field].filter((item: any) => JSON.stringify(item) !== JSON.stringify(value));
+        record[field] = record[field].filter((item: any) => JSON.stringify(item) !== JSON.stringify(value));
         if (record[field].length !== initialLength) {
-          await this.driver.update(query, record);
+          const validated = this.validateData(record, false);
+          await this.driver.update(query, validated);
           count++;
         }
       }
@@ -490,7 +517,8 @@ export class Hawiah {
     for (const record of records) {
       if (Array.isArray(record[field]) && record[field].length > 0) {
         record[field].shift();
-        await this.driver.update(query, record);
+        const validated = this.validateData(record, false);
+        await this.driver.update(query, validated);
         count++;
       }
     }
@@ -513,7 +541,8 @@ export class Hawiah {
         record[field] = [];
       }
       record[field].unshift(value);
-      await this.driver.update(query, record);
+      const validated = this.validateData(record, false);
+      await this.driver.update(query, validated);
       count++;
     }
     return count;
@@ -532,7 +561,8 @@ export class Hawiah {
     for (const record of records) {
       if (Array.isArray(record[field]) && record[field].length > 0) {
         record[field].pop();
-        await this.driver.update(query, record);
+        const validated = this.validateData(record, false);
+        await this.driver.update(query, validated);
         count++;
       }
     }
@@ -553,7 +583,9 @@ export class Hawiah {
     for (const record of records) {
       if (field in record) {
         delete record[field];
-        await this.driver.update(query, record);
+        // Full validation ensures we didn't delete a required field
+        const validated = this.validateData(record, false);
+        await this.driver.update(query, validated);
         count++;
       }
     }
@@ -575,7 +607,8 @@ export class Hawiah {
       if (oldField in record) {
         record[newField] = record[oldField];
         delete record[oldField];
-        await this.driver.update(query, record);
+        const validated = this.validateData(record, false);
+        await this.driver.update(query, validated);
         count++;
       }
     }
@@ -674,7 +707,7 @@ export class Hawiah {
   async getWith(query: Query = {}, ...relations: string[]): Promise<Data[]> {
     this.ensureConnected();
     const records = await this.driver.get(query);
-    
+
     if (relations.length === 0 || records.length === 0) {
       return records;
     }
@@ -694,7 +727,7 @@ export class Hawiah {
   async getOneWith(query: Query, ...relations: string[]): Promise<Data | null> {
     this.ensureConnected();
     const record = await this.driver.getOne(query);
-    
+
     if (!record || relations.length === 0) {
       return record;
     }
@@ -721,7 +754,7 @@ export class Hawiah {
     if (!loader) {
       loader = new DataLoader(async (keys: readonly any[]) => {
         const allRecords = await target.get({});
-        
+
         if (type === 'one') {
           const map = new Map<any, Data>();
           allRecords.forEach(record => {
@@ -743,7 +776,7 @@ export class Hawiah {
           return keys.map(key => map.get(key) || []);
         }
       }, { cache: true });
-      
+
       this.loaders.set(relationName, loader);
     }
 
@@ -751,7 +784,7 @@ export class Hawiah {
     if (keys.length === 0) return;
 
     const results = await loader.loadMany(keys);
-    
+
     let resultIndex = 0;
     records.forEach(record => {
       if (record[localKey] != null) {
@@ -769,6 +802,16 @@ export class Hawiah {
   clearCache(): void {
     this.loaders.forEach(loader => loader.clearAll());
     this.loaders.clear();
+  }
+
+  /**
+   * Helper to validate data if schema exists and driver is not SQL.
+   */
+  private validateData(data: Data, isPartial: boolean = false): Data {
+    if (this.schema && this.driver.dbType !== 'sql') {
+      return this.schema.validate(data, isPartial);
+    }
+    return data;
   }
 }
 

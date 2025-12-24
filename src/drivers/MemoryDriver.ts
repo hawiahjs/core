@@ -3,6 +3,7 @@ import { IDriver, Query, Data } from '../interfaces/IDriver';
 export class MemoryDriver implements IDriver {
   private data: Data[] = [];
   private idCounter: number = 1;
+  dbType: 'sql' | 'nosql' = 'nosql';
 
   async connect(): Promise<void> {
     this.data = [];
