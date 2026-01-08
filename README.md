@@ -120,5 +120,4 @@ export const dbEvents = new HawiahNext({
 ```
 
 ## License
-
 MIT
