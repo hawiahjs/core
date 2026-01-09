@@ -12,6 +12,8 @@ export class Hawiah {
   protected relations: Map<string, RelationConfig> = new Map();
   protected loaders: Map<string, DataLoader<any, any>> = new Map();
   protected schema?: Schema;
+  protected rootDriver?: IDriver;
+
   public static readonly IGNORE_KEYS = new Set(['collectionName', 'tableName', 'collection', 'table', 'connectionKey']);
   private static readonly driversPool: Map<string, IDriver> = new Map();
   private static readonly connectionPromises: Map<string | IDriver, Promise<void>> = new Map();
@@ -26,17 +28,8 @@ export class Hawiah {
     if (cKey) return cKey;
 
     cKey = typeof driver === 'function' ? driver.name : (driver.constructor?.name || 'UnknownDriver');
-
-    const driverClass = typeof driver === 'function' ? driver : driver.constructor;
-    const supportsTable = typeof driverClass.prototype?.table === 'function' ||
-      (typeof driver === 'object' && typeof driver.table === 'function');
-
-    const ignoreKeys = supportsTable
-      ? Hawiah.IGNORE_KEYS
-      : new Set([...Hawiah.IGNORE_KEYS].filter(k => !['collectionName', 'tableName', 'collection', 'table'].includes(k)));
-
     for (const key in config) {
-      if (!ignoreKeys.has(key)) {
+      if (!Hawiah.IGNORE_KEYS.has(key)) {
         const val = config[key];
         if (val !== null && typeof val !== 'object') {
           cKey += `|${key}:${val}`;
@@ -68,7 +61,14 @@ export class Hawiah {
       if (Hawiah.driversPool.has(cKey)) {
         const rootDriver = Hawiah.driversPool.get(cKey)!;
         const tableName = config.collectionName || config.tableName || config.collection || config.table || 'default';
-        this.driver = rootDriver.table ? rootDriver.table(tableName) : rootDriver;
+
+        if (rootDriver.table) {
+          this.driver = rootDriver.table(tableName);
+        } else {
+          // Smart Pooling: Create new instance linked to root for connection sharing
+          this.driver = new options.driver(config);
+          this.rootDriver = rootDriver;
+        }
 
         if (this.driver.isConnected && this.driver.isConnected()) {
           this.isConnected = true;
@@ -115,7 +115,42 @@ export class Hawiah {
     }
 
     await connectionPromise;
+
+    // Smart Pooling: If we have a root driver (shared connection), ensure we inherit its state
+    if (this.rootDriver && !this.driver.isConnected?.()) {
+      this.transplantConnection(this.rootDriver, this.driver);
+    }
+
     this.isConnected = true;
+  }
+
+  /**
+   * Helper to transplant connection state from one driver to another.
+   * Useful for drivers that don't support native table switching (like MongoDriver).
+   */
+  private transplantConnection(source: any, target: any) {
+    const props = ['client', 'db', 'connection', 'pool'];
+    let transplanted = false;
+
+    for (const prop of props) {
+      if (source[prop] && !target[prop]) {
+        target[prop] = source[prop];
+        transplanted = true;
+      }
+    }
+
+    // Specific MongoDB Fix
+    if (target.db && target.collectionName && typeof target.db.collection === 'function') {
+      target.collection = target.db.collection(target.collectionName);
+    }
+
+    if (transplanted || (source.isConnected && source.isConnected())) {
+      target.connected = true;
+      if (typeof target.isConnectedState !== 'undefined') target.isConnectedState = true;
+
+      // Silence connect to prevent re-connection
+      target.connect = async () => { };
+    }
   }
 
   /**

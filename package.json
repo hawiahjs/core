@@ -1,6 +1,6 @@
 {
   "name": "@hawiah/core",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Core package for Hawiah - Schema-less database abstraction layer with relationships and DataLoader batching",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
